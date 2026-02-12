@@ -55,7 +55,9 @@ from data_fetcher import DataFetcher, LiveDataStream
 from analyzer import MultiTimeframeAnalyzer
 from risk_manager import RiskManager, PortfolioManager
 from indicators import TechnicalIndicators, QuantumIndicators
+
 from backtester import Backtester
+from notifications import NotificationManager
 
 # Page config
 st.set_page_config(
@@ -246,30 +248,66 @@ with st.sidebar:
     st.markdown("---")
     st.subheader("🔔 Active Alerts")
     
-    # Placeholder for alerts system
+    # Notification Settings
+    with st.expander("📱 Notification Settings"):
+        st.session_state.telegram_token = st.text_input("Telegram Bot Token", value=st.session_state.get('telegram_token', ''), type="password")
+        st.session_state.telegram_chat_id = st.text_input("Telegram Chat ID", value=st.session_state.get('telegram_chat_id', ''))
+        st.caption("Get token from @BotFather and ID from @userinfobot")
+
+    # Initialize Notifier
+    notifier = NotificationManager()
+
+    # Alert System
     if 'alerts' not in st.session_state:
         st.session_state.alerts = []
     
-    if st.button("➕ Add Alert for " + symbol):
-        st.session_state.alerts.append({
-            'symbol': symbol,
-            'condition': 'Price > ' + str(current_price * 1.02),
-            'time': datetime.now().strftime('%H:%M')
-        })
-        st.success("Alert added!")
-    
+    # Custom Alert Creator
+    with st.form("alert_form"):
+        col_a, col_b = st.columns(2)
+        alert_cond = col_a.selectbox("Condition", ["Price Above", "Price Below"])
+        alert_price = col_b.number_input("Target Price", value=float(current_price))
+        
+        if st.form_submit_button("➕ Add Alert"):
+            st.session_state.alerts.append({
+                'symbol': symbol,
+                'type': 'above' if 'Above' in alert_cond else 'below',
+                'target_price': alert_price,
+                'time': datetime.now().strftime('%H:%M')
+            })
+            st.success(f"Alert set for {symbol} @ {alert_price}")
+
+    # Display Alerts
     if st.session_state.alerts:
+        st.write("---")
         for i, alert in enumerate(st.session_state.alerts):
-            st.info(f"{alert['symbol']}: {alert['condition']} ({alert['time']})")
-            if st.button("❌", key=f"del_alert_{i}"):
+            icon = "📈" if alert['type'] == 'above' else "📉"
+            st.info(f"{icon} {alert['symbol']}: {alert['type'].upper()} {alert['target_price']}")
+            if st.button("❌ Remove", key=f"del_alert_{i}"):
                 st.session_state.alerts.pop(i)
                 st.rerun()
     else:
         st.caption("No active alerts")
 
+    # Run Check (Only on Auto-Refresh or Manual Refresh)
+    # We pass the CURRENT fetched price to the checker
+    try:
+        notifier.check_and_send_alerts(current_price, symbol)
+    except Exception:
+        pass
+
     st.markdown("---")
     st.markdown("### 👨‍💻 Created by **Naman (NK)**")
     st.caption("© 2026 Institutional Trading Dashboard")
+
+# --- DISCLAIMER FOOTER ---
+st.markdown("""
+<div style='text-align: center; color: #888; font-size: 12px; margin_top: 50px; padding: 20px; border-top: 1px solid #333;'>
+    <p><strong>⚠️ DISCLAIMER: FOR AI RESEARCH PURPOSES ONLY</strong></p>
+    <p>This tool is designed for educational and AI research purposes only. It does not constitute financial advice.</p>
+    <p>Trading in financial markets involves significant risk. Please consult with a certified financial advisor before making any investment decisions.</p>
+    <p>The creator (Naman/NK) assumes no responsibility for any financial losses or trading decisions made based on this tool.</p>
+</div>
+""", unsafe_allow_html=True)
 
 # Main content
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["📈 Analysis", "📊 Charts", "💼 Trade Plan", "🔙 Backtest", "📚 Details"])
